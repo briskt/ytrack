@@ -24,6 +24,7 @@ func TestConfigCommandsWriteAndShowMaskedEffectiveConfig(t *testing.T) {
 	runCLI(t, paths, "global", "set-url", "https://global.example")
 	runCLI(t, paths, "global", "set-token", "perm:global-secret")
 	runCLI(t, paths, "set-url", "https://local.example")
+	runCLI(t, paths, "set-token", "perm:local-secret")
 	runCLI(t, paths, "set-project-id", "0-1")
 
 	out := runCLI(t, paths, "show")
@@ -37,8 +38,38 @@ func TestConfigCommandsWriteAndShowMaskedEffectiveConfig(t *testing.T) {
 	if !strings.Contains(out, "project_id: 0-1") {
 		t.Fatalf("show output = %q, want local project_id", out)
 	}
-	if strings.Contains(out, "global-secret") {
+	if strings.Contains(out, "global-secret") || strings.Contains(out, "local-secret") {
 		t.Fatalf("show output leaked full token: %q", out)
+	}
+}
+
+func TestLocalURLDoesNotReceiveGlobalToken(t *testing.T) {
+	temp := t.TempDir()
+	paths := config.Paths{
+		Global: filepath.Join(temp, "global", "config.json"),
+		Local:  filepath.Join(temp, "project", ".ytrack", "config.json"),
+	}
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	runCLI(t, paths, "global", "set-url", "https://global.example")
+	runCLI(t, paths, "global", "set-token", "perm:global-secret")
+	runCLI(t, paths, "set-url", server.URL)
+	runCLI(t, paths, "set-project-id", "0-1")
+
+	cmd := NewRootCommand(Options{Paths: paths, In: strings.NewReader(""), Out: &bytes.Buffer{}, Err: &bytes.Buffer{}})
+	cmd.SetArgs([]string{"issue", "list"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "missing configured token") {
+		t.Fatalf("issue list error = %v, want missing configured token", err)
+	}
+	if requests != 0 {
+		t.Fatalf("local server received %d requests, want none", requests)
 	}
 }
 

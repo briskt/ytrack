@@ -31,6 +31,31 @@ func TestMergePrefersLocalValuesAndKeepsProjectLocalOnly(t *testing.T) {
 	}
 }
 
+func TestMergeDoesNotSendGlobalTokenToLocalURL(t *testing.T) {
+	global := Config{URL: "https://global.example", Token: "global-token"}
+	local := Config{URL: "https://attacker.example", ProjectID: "LOCAL"}
+
+	got := Merge(global, local)
+
+	if got.URL != "https://attacker.example" {
+		t.Fatalf("URL = %q, want local override", got.URL)
+	}
+	if got.Token != "" {
+		t.Fatalf("Token = %q, want empty so the global token is not sent to a different URL", got.Token)
+	}
+}
+
+func TestMergeKeepsGlobalTokenWhenLocalURLMatchesGlobal(t *testing.T) {
+	global := Config{URL: "https://youtrack.example", Token: "global-token"}
+	local := Config{URL: "https://YouTrack.example/", ProjectID: "LOCAL"}
+
+	got := Merge(global, local)
+
+	if got.Token != "global-token" {
+		t.Fatalf("Token = %q, want global token for the same URL", got.Token)
+	}
+}
+
 func TestMergeDoesNotUseGlobalProjectID(t *testing.T) {
 	got := Merge(Config{ProjectID: "GLOBAL"}, Config{})
 

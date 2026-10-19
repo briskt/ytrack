@@ -92,12 +92,21 @@ func Merge(global, local Config) Config {
 	}
 	if local.URL != "" {
 		merged.URL = local.URL
+		// The global token belongs to the global URL. Never send it to a
+		// different server configured by a (possibly untrusted) local file.
+		if !sameURL(local.URL, global.URL) {
+			merged.Token = ""
+		}
 	}
 	if local.Token != "" {
 		merged.Token = local.Token
 	}
 	merged.ProjectID = local.ProjectID
 	return merged
+}
+
+func sameURL(a, b string) bool {
+	return strings.EqualFold(strings.TrimRight(a, "/"), strings.TrimRight(b, "/"))
 }
 
 func MaskToken(token string) string {
